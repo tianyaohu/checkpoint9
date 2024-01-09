@@ -25,7 +25,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(pre_approach_node src/pre_approach.cpp)
-ament_target_dependencies(pre_approach_node rclcpp geometry_msgs sensor_msgs)
+ament_target_dependencies(pre_approach_node rclcpp geometry_msgs sensor_msgs nav_msgs)
 
 install(TARGETS
   pre_approach_node

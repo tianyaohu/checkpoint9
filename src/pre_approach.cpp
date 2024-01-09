@@ -1,5 +1,8 @@
 #include <chrono>
+#include <cmath>
 #include <geometry_msgs/msg/twist.hpp>
+#include <iostream>
+#include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
@@ -37,10 +40,14 @@ public:
         rclcpp::CallbackGroupType::MutuallyExclusive);
     callback_group_2 = this->create_callback_group(
         rclcpp::CallbackGroupType::MutuallyExclusive);
+    callback_group_3 = this->create_callback_group(
+        rclcpp::CallbackGroupType::MutuallyExclusive);
 
-    // init subscription option
+    // init subscription options
     rclcpp::SubscriptionOptions option1;
     option1.callback_group = callback_group_1;
+    rclcpp::SubscriptionOptions option2;
+    option1.callback_group = callback_group_2;
 
     // QOS profile
     rclcpp::QoS qos_profile_subscriber(1);
@@ -51,34 +58,21 @@ public:
         "/scan", qos_profile_subscriber,
         std::bind(&PreApproach::scan_callback, this, _1), option1);
 
+    // init odom sub
+    odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+        "odom", 1, std::bind(&PreApproach::odom_callback, this, _1), option2);
+
     // init timer
     timer_ = this->create_wall_timer(
-        1000ms, std::bind(&PreApproach::timer_callback, this),
-        callback_group_2);
+        100ms, std::bind(&PreApproach::timer_callback, this), callback_group_2);
 
     // init cmd_vel publisher
-    vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 1);
+    vel_pub_ =
+        this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
 
+    // set initial speed
     speed_linear_x = 0.2;
-  }
-
-  void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
-
-    RCLCPP_INFO(this->get_logger(), "length of range: %ld", msg->ranges.size());
-
-    RCLCPP_INFO(this->get_logger(), "0? %f", msg->ranges[0]);
-    RCLCPP_INFO(this->get_logger(), "270? %f", msg->ranges[270]);
-    RCLCPP_INFO(this->get_logger(), "540? %f", msg->ranges[540]);
-    RCLCPP_INFO(this->get_logger(), "810? %f", msg->ranges[810]);
-    RCLCPP_INFO(this->get_logger(), "1080? %f", msg->ranges[1080]);
-  }
-
-  void timer_callback() {
-    auto message = geometry_msgs::msg::Twist();
-    message.linear.x = speed_linear_x;
-    // message.angular.z = speed_angular_z;
-    vel_pub_->publish(message);
-    RCLCPP_INFO(this->get_logger(), "Moving");
+    speed_angular_z = 0.0;
   }
 
 private:
@@ -86,17 +80,78 @@ private:
   // call back groups
   rclcpp::CallbackGroup::SharedPtr callback_group_1;
   rclcpp::CallbackGroup::SharedPtr callback_group_2;
+  rclcpp::CallbackGroup::SharedPtr callback_group_3;
 
   // sub and pubs
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
 
-  double speed_linear_x, speed_angular_z;
+  float speed_linear_x, speed_angular_z;
 
   // arg params
   double arg_obstacle;
   int arg_degrees;
+  bool wall_reached;
+
+  // rot vars
+  bool finished_rot;
+  bool target_inited;
+  double target_yaw;
+
+  void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
+    // get the laser reading of front
+    float front_dist = msg->ranges[540];
+
+    if (wall_reached == false) {
+      RCLCPP_INFO(this->get_logger(), "540? %f", front_dist);
+    }
+
+    // check if obstacle is within distance, and if wall_reached flag is raised
+    if (front_dist <= arg_obstacle && wall_reached == false) {
+      speed_linear_x = 0;
+      speed_angular_z = 0;
+      // set wall reached flag
+      wall_reached = true;
+    }
+  }
+
+  void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+    // if wall is reached and rotation is not performed
+    if (wall_reached && finished_rot == false) {
+      // if wall not reached or rotation is finished do nothing
+      const float q_x = msg->pose.pose.orientation.x;
+      const float q_y = msg->pose.pose.orientation.y;
+      const float q_z = msg->pose.pose.orientation.z;
+      const float q_w = msg->pose.pose.orientation.w;
+
+      // Yaw (z-axis rotation)
+      float sinYaw = 2.0f * (q_w * q_z + q_x * q_y);
+      float cosYaw = 1.0f - 2.0f * (q_y * q_y + q_z * q_z);
+      float cur_yaw = std::atan2(sinYaw, cosYaw);
+
+      // if target_yaw is not set, set it
+      if (!target_inited) {
+        // set cur_yaw
+        target_yaw = cur_yaw + (arg_degrees % 360) * M_PI / 180;
+        RCLCPP_INFO(this->get_logger(), "target_yaw? %f", target_yaw);
+
+        if (abs(target_yaw) > M_PI) {
+          target_yaw =
+              target_yaw > 0 ? -2 * M_PI + target_yaw : 2 * M_PI + target_yaw;
+        }
+      }
+      RCLCPP_INFO(this->get_logger(), "cur_yaw? %f", cur_yaw);
+    }
+  }
+
+  void timer_callback() {
+    auto message = geometry_msgs::msg::Twist();
+    message.linear.x = speed_linear_x;
+    message.angular.z = speed_angular_z;
+    vel_pub_->publish(message);
+  }
 };
 
 int main(int argc, char *argv[]) {

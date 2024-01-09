@@ -3,6 +3,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
+using std::placeholders::_1;
+
 using namespace std::chrono_literals;
 using namespace std;
 
@@ -40,74 +42,52 @@ public:
     rclcpp::SubscriptionOptions option1;
     option1.callback_group = callback_group_1;
 
-    // // init laser subscription
-    // laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-    //     "/scan", 1, std::bind(&RobotPatrol::scan_callback, this, _1),
-    //     option1);
+    // QOS profile
+    rclcpp::QoS qos_profile_subscriber(1);
+    qos_profile_subscriber.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
 
-    // // init timer
-    // timer_ = this->create_wall_timer(
-    //     100ms, std::bind(&PreApproach::timer_callback, this),
-    //     callback_group_2);
+    // init laser subscription with QOS
+    laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+        "/scan", qos_profile_subscriber,
+        std::bind(&PreApproach::scan_callback, this, _1), option1);
 
-    // // init cmd_vel publisher
-    // vel_pub_ =
-    //     this->create_publisher<geometry_msgs::msg::Twist>("robot/cmd_vel",
-    //     1);
+    // init timer
+    timer_ = this->create_wall_timer(
+        1000ms, std::bind(&PreApproach::timer_callback, this),
+        callback_group_2);
+
+    // init cmd_vel publisher
+    vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 1);
+
+    speed_linear_x = 0.2;
   }
 
   void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
 
-    auto front_laser_reading = msg->ranges;
+    RCLCPP_INFO(this->get_logger(), "length of range: %ld", msg->ranges.size());
 
-    cout << " length of range" << msg->ranges.size() << endl;
-
-    cout << "right?" << msg->ranges[0] << endl;
-
-    cout << "Center?" << msg->ranges[180] << endl;
-
-    cout << "left?" << msg->ranges[359] << endl;
-
-    // if (min_within_vision < avoid_dist) { // this finds the min within range
-    //   linear_x = 0;
-    //   if (last_direction > 0) {
-
-    //     angular_z = -0.7;
-    //     RCLCPP_INFO(this->get_logger(), "Avoiding obstacles: turning
-    //     RIGHT!");
-
-    //   } else {
-    //     angular_z = 0.7;
-    //     RCLCPP_INFO(this->get_logger(), "Avoiding obstacles: turning LEFT!");
-    //   }
-    //   // force sleep
-
-    //   rclcpp::sleep_for(100ms);
-    // } else {
-    //   angular_z = direction_ / 2;
-    //   // angular_z = 0.1;
-    //   linear_x = 0.1;
-    //   last_direction = direction_;
-    // }
-
-    // RCLCPP_INFO(this->get_logger(), "index is : '%d'", temp);
+    RCLCPP_INFO(this->get_logger(), "0? %f", msg->ranges[0]);
+    RCLCPP_INFO(this->get_logger(), "270? %f", msg->ranges[270]);
+    RCLCPP_INFO(this->get_logger(), "540? %f", msg->ranges[540]);
+    RCLCPP_INFO(this->get_logger(), "810? %f", msg->ranges[810]);
+    RCLCPP_INFO(this->get_logger(), "1080? %f", msg->ranges[1080]);
   }
 
   void timer_callback() {
-    this->get_parameter("velocity", vel_parameter_);
-    RCLCPP_INFO(this->get_logger(), "Velocity parameter is: %f",
-                vel_parameter_);
     auto message = geometry_msgs::msg::Twist();
-    message.linear.x = vel_parameter_;
+    message.linear.x = speed_linear_x;
+    // message.angular.z = speed_angular_z;
     vel_pub_->publish(message);
+    RCLCPP_INFO(this->get_logger(), "Moving");
   }
 
 private:
   // attributes
+  // call back groups
   rclcpp::CallbackGroup::SharedPtr callback_group_1;
   rclcpp::CallbackGroup::SharedPtr callback_group_2;
 
-  std::double_t vel_parameter_;
+  // sub and pubs
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
@@ -119,9 +99,16 @@ private:
   int arg_degrees;
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<PreApproach>());
+  // init node
+  std::shared_ptr<PreApproach> node = std::make_shared<PreApproach>();
+
+  // Initialize one MultiThreadedExecutor object
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(node);
+  executor.spin();
+
   rclcpp::shutdown();
   return 0;
 }

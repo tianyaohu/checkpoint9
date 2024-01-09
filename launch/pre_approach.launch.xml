@@ -1,8 +1,8 @@
 <launch>
 
   <!-- args that can be set from the command line or a default will be used -->
-  <arg name="obstacle" default="0"/>
-  <arg name="degrees" default="255"/>
+  <arg name="obstacle" default="1.0"/>
+  <arg name="degrees" default="180.0"/>
 
     <node pkg="attach_shelf" exec="pre_approach_node" name="pre_approach_node">
         <param name="obstacle" value="$(var obstacle)"/>

@@ -73,6 +73,8 @@ public:
     // set initial speed
     speed_linear_x = 0.2;
     speed_angular_z = 0.0;
+
+    MAX_ANGULAR_SPEED = 0.5;
   }
 
 private:
@@ -88,6 +90,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
 
+  double MAX_ANGULAR_SPEED;
   float speed_linear_x, speed_angular_z;
 
   // arg params
@@ -134,15 +137,39 @@ private:
       // if target_yaw is not set, set it
       if (!target_inited) {
         // set cur_yaw
+        double temp = (arg_degrees % 360) * M_PI / 180;
         target_yaw = cur_yaw + (arg_degrees % 360) * M_PI / 180;
         RCLCPP_INFO(this->get_logger(), "target_yaw? %f", target_yaw);
+        RCLCPP_INFO(this->get_logger(), "temp %f", temp);
 
         if (abs(target_yaw) > M_PI) {
           target_yaw =
               target_yaw > 0 ? -2 * M_PI + target_yaw : 2 * M_PI + target_yaw;
         }
+        // set flag
+        target_inited = true;
+        // if target is inited start turning
+      } else {
+        double turn_delta = cur_yaw - target_yaw;
+        if (abs(turn_delta) > M_PI) {
+          turn_delta =
+              turn_delta > 0 ? -2 * M_PI + turn_delta : 2 * M_PI + turn_delta;
+        }
+        // set angular speed
+        speed_angular_z = min(MAX_ANGULAR_SPEED, turn_delta / -3);
+
+        RCLCPP_INFO(this->get_logger(), "turn_delta? %f", turn_delta);
+        RCLCPP_INFO(this->get_logger(), "cur_yaw? %f", cur_yaw);
+        RCLCPP_INFO(this->get_logger(), "finished_rot? %s",
+                    finished_rot ? "True" : "False");
+
+        if (turn_delta < 0.05) {
+          speed_angular_z = 0;
+          finished_rot = true;
+          RCLCPP_INFO(this->get_logger(), "Final Yaw upon finishing? %f",
+                      cur_yaw);
+        }
       }
-      RCLCPP_INFO(this->get_logger(), "cur_yaw? %f", cur_yaw);
     }
   }
 

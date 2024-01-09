@@ -21,14 +21,14 @@ public:
 
     // declearing parameters
     this->declare_parameter<std::double_t>("obstacle", 2.0, obstacle_desc);
-    this->declare_parameter<std::double_t>("degrees", 360.0, degree_desc);
+    this->declare_parameter<int>("degrees", 360, degree_desc);
 
     // print to see if parameter Setting workedf
     this->get_parameter("obstacle", arg_obstacle);
     RCLCPP_INFO(this->get_logger(), "Obstacle parameter is: %f", arg_obstacle);
 
     this->get_parameter("degrees", arg_degrees);
-    RCLCPP_INFO(this->get_logger(), "Degrees parameter is: %f", arg_degrees);
+    RCLCPP_INFO(this->get_logger(), "Degrees parameter is: %d", arg_degrees);
 
     // Init CallbackGroups
     callback_group_1 = this->create_callback_group(
@@ -113,7 +113,10 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
 
   double speed_linear_x, speed_angular_z;
-  double arg_obstacle, arg_degrees;
+
+  // arg params
+  double arg_obstacle;
+  int arg_degrees;
 };
 
 int main(int argc, char **argv) {

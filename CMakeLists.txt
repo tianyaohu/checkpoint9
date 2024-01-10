@@ -34,7 +34,7 @@ endif()
 add_executable(pre_approach_node src/pre_approach.cpp)
 ament_target_dependencies(pre_approach_node rclcpp geometry_msgs sensor_msgs nav_msgs)
 
-add_executable(pre_approach_v2_node src/pre_approach.cpp)
+add_executable(pre_approach_v2_node src/pre_approach_v2.cpp)
 ament_target_dependencies(pre_approach_v2_node rclcpp geometry_msgs sensor_msgs nav_msgs)
 rosidl_target_interfaces (pre_approach_v2_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
@@ -50,7 +50,8 @@ install(TARGETS
 )
 
 install(
-  DIRECTORY launch
+  DIRECTORY 
+  launch
   rviz
   DESTINATION share/${PROJECT_NAME}
 )

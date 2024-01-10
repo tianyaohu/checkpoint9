@@ -5,6 +5,8 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
+// custom srv
+#include <attach_shelf/srv/go_to_loading.hpp>
 
 using std::placeholders::_1;
 
@@ -17,23 +19,33 @@ public:
     // parameter descriptions
     auto obstacle_desc = rcl_interfaces::msg::ParameterDescriptor{};
     auto degree_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    auto final_approach_desc = rcl_interfaces::msg::ParameterDescriptor{};
 
     // param description details
     obstacle_desc.description =
         "Distance (in meters) to the obstacle at which the robot will stop.";
     degree_desc.description =
         "Number of degrees for the rotation of the robot after stopping";
+    final_approach_desc.description =
+        "If True, the robot will move underneath the shelf and it will lift "
+        "it. If False, the robot will only publish the cart_frame transform, "
+        "but will not do the final approach";
 
     // declearing parameters
     this->declare_parameter<std::double_t>("obstacle", 2.0, obstacle_desc);
     this->declare_parameter<int>("degrees", 360, degree_desc);
+    this->declare_parameter<bool>("final_approach", true, final_approach_desc);
 
-    // print to see if parameter Setting workedf
+    // set and print to see if parameter Setting workedf
     this->get_parameter("obstacle", arg_obstacle);
     RCLCPP_INFO(this->get_logger(), "Obstacle parameter is: %f", arg_obstacle);
 
     this->get_parameter("degrees", arg_degrees);
     RCLCPP_INFO(this->get_logger(), "Degrees parameter is: %d", arg_degrees);
+
+    this->get_parameter("final_approach", arg_final_approach);
+    RCLCPP_INFO(this->get_logger(), "Degrees parameter is: %d",
+                arg_final_approach);
 
     // Init CallbackGroups
     callback_group_1 = this->create_callback_group(
@@ -70,6 +82,10 @@ public:
     vel_pub_ =
         this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
 
+    // init approach service client
+    client_ =
+        this->create_client<attach_shelf::srv::GoToLoading>("attach_shelf");
+
     // set initial speed
     speed_linear_x = 0.2;
     speed_angular_z = 0.0;
@@ -89,13 +105,22 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
+  // approach shelf service client
+  rclcpp::Client<attach_shelf::srv::GoToLoading>::SharedPtr client_;
 
+  // service client parameter
+  bool attach_load_service_done_ = false;
+
+  // speed
   double MAX_ANGULAR_SPEED;
   float speed_linear_x, speed_angular_z;
 
   // arg params
   double arg_obstacle;
   int arg_degrees;
+  bool arg_final_approach;
+
+  // pre approach params: wall flag;
   bool wall_reached;
 
   // rot vars
@@ -168,6 +193,30 @@ private:
           finished_rot = true;
           RCLCPP_INFO(this->get_logger(), "Final Yaw upon finishing? %f",
                       cur_yaw);
+
+          // block to wait for service to become available
+          while (!client_->wait_for_service(1s)) {
+            if (!rclcpp::ok()) {
+              RCLCPP_ERROR(this->get_logger(),
+                           "Client interrupted while waiting for service. "
+                           "Terminating...");
+              return;
+            }
+            RCLCPP_INFO(this->get_logger(),
+                        "Service Unavailable. Waiting for Service...");
+          }
+          // service to became available
+
+          // init request
+          auto request =
+              std::make_shared<attach_shelf::srv::GoToLoad::Request>();
+          request->attach_to_shelf = true; // temp need to add one more argument
+          // set service status flag to false;
+          attach_load_service_done_ = false;
+          // send request
+          auto result_future = client_->async_send_request(
+              request, std::bind(&ServiceClient::response_callback, this,
+                                 std::placeholders::_1));
         }
       }
     }
@@ -178,6 +227,18 @@ private:
     message.linear.x = speed_linear_x;
     message.angular.z = speed_angular_z;
     vel_pub_->publish(message);
+  }
+
+  void response_callback(
+      rclcpp::Client<attach_shelf::srv::GoToLoad>::SharedFuture future) {
+    auto status = future.wait_for(1s);
+    if (status == std::future_status::ready) {
+      RCLCPP_INFO(this->get_logger(), "Result: success %s",
+                  future.get()->complete.c_str());
+      attach_load_service_done_ = true;
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
+    }
   }
 };
 

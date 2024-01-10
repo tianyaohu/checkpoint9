@@ -108,7 +108,8 @@ private:
     float front_dist = msg->ranges[540];
 
     if (wall_reached == false) {
-      RCLCPP_INFO(this->get_logger(), "540? %f", front_dist);
+      RCLCPP_INFO(this->get_logger(), "front obstacle distance? %f",
+                  front_dist);
     }
 
     // check if obstacle is within distance, and if wall_reached flag is raised

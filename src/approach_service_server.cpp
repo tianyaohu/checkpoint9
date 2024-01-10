@@ -59,39 +59,95 @@ private:
     response->complete = false;
   }
 
+  std::vector<std::pair<int, int>>
+  getConsecutiveRanges(const std::vector<float> &values) {
+    float THRESH_HOLD = 0.001;
+    std::vector<std::pair<int, int>> ranges;
 
+    size_t start = 0;
+    size_t end = 0;
+
+    for (size_t i = 0; i < values.size(); ++i) {
+      if (values[i] > THRESH_HOLD) {
+        // Current value is greater than 0, extend the range
+        end = i;
+      } else {
+        // Current value is not greater than 0, add the range if it exists
+        if (start != end) {
+          ranges.emplace_back(start, end - 1);
+        }
+        // Reset the range
+        start = end = i + 1;
+      }
+    }
+
+    // Add the last range if it exists
+    if (start != end) {
+      ranges.emplace_back(start, end - 1);
+    }
+
+    return ranges;
+  }
+
+  std::vector<int>
+  findMinIndicesInRanges(const std::vector<float> &values,
+                         const std::vector<std::pair<int, int>> &ranges) {
+
+    std::vector<int> minIndices;
+
+    for (const auto &range : ranges) {
+      // Find the minimum value and its index within the range
+      auto iterator = min_element(values.begin() + range.first,
+                                  values.begin() + range.second);
+      // Calculate the index of the maximum element
+      int index = distance(values.begin(), iterator);
+      minIndices.emplace_back(index);
+    }
+    return minIndices;
+  }
 
   void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
 
+    // find the ranges with consecutive indices with values greater
+    vector<pair<int, int>> high_intense_ranges =
+        getConsecutiveRanges(msg->intensities);
 
-  // find the ranges with consecutive indices with values greater
+    // find the indicies with min value
+    vector<int> min_indicies =
+        findMinIndicesInRanges(msg->ranges, high_intense_ranges);
 
-  std::cout << "------------------------------------" << endl;
+    // print to see min indicies
+    for (const auto &i : min_indicies) {
+      RCLCPP_INFO(this->get_logger(),
+                  "min indicies : %d; corresponding value: %f", i,
+                  msg->ranges[i]);
+    }
 
-  cout << "length of intensity scan" << msg->intensities.size() << endl;
+    std::cout << "------------------------------------" << endl;
 
-  // print high intensity ranges
-  // for (size_t i = 0; i < msg->intensities.size(); i++) {
+    // cout << "length of intensity scan" << msg->intensities.size() << endl;
 
-  //   float temp = msg->intensities[i];
-  //   if (temp > 0.001) {
-  //     RCLCPP_INFO(this->get_logger(), "%ldth intensity reading: %f", i,
-  //                 msg->intensities[i]);
-  //   }
-  // }
+    // print high intensity ranges
+    // for (size_t i = 0; i < msg->intensities.size(); i++) {
 
-  // find the high intensity consecutive ranges
-}
+    //   float temp = msg->intensities[i];
+    //   if (temp > 0.001) {
+    //     RCLCPP_INFO(this->get_logger(), "%ldth intensity reading: %f", i,
+    //                 msg->intensities[i]);
+    //   }
+    // }
 
-//   rclcpp::Service<GoToLoading>::SharedPtr srv_;
+    // find the high intensity consecutive ranges
+  }
 
-rclcpp::CallbackGroup::SharedPtr callback_group_1;
-rclcpp::CallbackGroup::SharedPtr callback_group_2;
-rclcpp::CallbackGroup::SharedPtr callback_group_3;
+  //   rclcpp::Service<GoToLoading>::SharedPtr srv_;
 
-rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
-}
-;
+  rclcpp::CallbackGroup::SharedPtr callback_group_1;
+  rclcpp::CallbackGroup::SharedPtr callback_group_2;
+  rclcpp::CallbackGroup::SharedPtr callback_group_3;
+
+  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
+};
 
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);

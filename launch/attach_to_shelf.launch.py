@@ -51,17 +51,13 @@ def generate_launch_description():
     #         'rviz_config_file_name': rviz_config_file_name_f}.items()
     # )
 
-    # approach_load_service_server = Node(
-    #     package='attach_shelf',
-    #     executable='approach_shelf_service_server',
-    #     output='screen',
-    #     name='approach_shelf_service_server',
-    #     emulate_tty=True,
-    #     # arguments=["-obstacle", obstacle_f,
-    #     #            "-degrees", degrees_f,
-    #     #            "-final_approach", final_approach_arg,
-    #     #            ]
-    # )
+    approach_load_service_server = Node(
+        package='attach_shelf',
+        executable='approach_shelf_service_server',
+        output='screen',
+        name='approach_shelf_service_server',
+        emulate_tty=True,
+    )
 
     pre_approach_v2_node = Node(
         package='attach_shelf',
@@ -79,7 +75,7 @@ def generate_launch_description():
         obstacle_arg,
         degrees_arg,
         final_approach_arg,
-        # approach_load_service_server,
+        approach_load_service_server,
         pre_approach_v2_node,
         # rviz_config_file_name_arg,
     ])

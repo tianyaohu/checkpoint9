@@ -28,29 +28,26 @@ def generate_launch_description():
         "final_approach", default_value="True"
     )
 
-    obstacle_f = LaunchConfiguration('obstacle')
-    degrees_f = LaunchConfiguration('degrees')
-    final_approach_f = LaunchConfiguration('final_approach')
-
-    approach_load_service_server = Node(
-        package='attach_shelf',
-        executable='approach_shelf_service_server',
-        output='screen',
-        name='approach_shelf_service_server',
-        emulate_tty=True,
-    )
-
     pre_approach_v2_node = Node(
         package='attach_shelf',
         executable='pre_approach_v2_node',
         output='screen',
         name='pre_approach_v2_node',
         emulate_tty=True,
-        arguments=["-obstacle", obstacle_f,
-                   "-degrees", degrees_f,
-                   "-final_approach", final_approach_f,
-                   ]
+        parameters= [
+            {"obstacle":LaunchConfiguration("obstacle")},
+            {"degrees":LaunchConfiguration("degrees")},
+            {"final_approach":LaunchConfiguration('final_approach')},
+        ]
     )
+
+    approach_load_service_server = Node(
+        package='attach_shelf',
+        executable='approach_shelf_service_server',
+        output='screen',
+        name='approach_shelf_service_server',
+    )
+
     ############### RVIZ ################
     # RVIZ Configuration
     package_description = "attach_shelf"
@@ -68,7 +65,7 @@ def generate_launch_description():
         obstacle_arg,
         degrees_arg,
         final_approach_arg,
+        # pre_approach_v2_node,
         approach_load_service_server,
-        pre_approach_v2_node,
-        rviz_node
+        # rviz_node
     ])

@@ -34,12 +34,17 @@ endif()
 add_executable(pre_approach_node src/pre_approach.cpp)
 ament_target_dependencies(pre_approach_node rclcpp geometry_msgs sensor_msgs nav_msgs)
 
+add_executable(pre_approach_v2_node src/pre_approach.cpp)
+ament_target_dependencies(pre_approach_v2_node rclcpp geometry_msgs sensor_msgs nav_msgs)
+rosidl_target_interfaces (pre_approach_v2_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
 add_executable(approach_shelf_service_server src/approach_service_server.cpp)
 ament_target_dependencies(approach_shelf_service_server rclcpp sensor_msgs tf2_ros)
 rosidl_target_interfaces (approach_shelf_service_server ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 install(TARGETS
   pre_approach_node
+  pre_approach_v2_node
   approach_shelf_service_server
   DESTINATION lib/${PROJECT_NAME}
 )

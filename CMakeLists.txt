@@ -11,9 +11,11 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GoToLoading.srv"
@@ -39,7 +41,7 @@ ament_target_dependencies(pre_approach_v2_node rclcpp geometry_msgs sensor_msgs 
 rosidl_target_interfaces (pre_approach_v2_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(approach_shelf_service_server src/approach_service_server.cpp)
-ament_target_dependencies(approach_shelf_service_server rclcpp sensor_msgs tf2_ros)
+ament_target_dependencies(approach_shelf_service_server rclcpp sensor_msgs tf2_ros tf2)
 rosidl_target_interfaces (approach_shelf_service_server ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 install(TARGETS

@@ -11,9 +11,12 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <utility>
 #include <vector>
+
+std::mutex vec_mu;
 
 using GoToLoading = attach_shelf::srv::GoToLoading;
 using std::placeholders::_1;
@@ -59,6 +62,10 @@ public:
         10ms, std::bind(&ApproachShelfService::timer_callback, this),
         callback_group_2);
 
+    // init frames needed COULD BE PARAMETERS
+    target_frame = "robot_front_laser_link";
+    robot_odom = "robot_odom";
+
     // server
     srv_ = create_service<GoToLoading>(
         "approach_shelf",
@@ -67,25 +74,58 @@ public:
   }
 
 private:
+  void broadcastCartTF(const geometry_msgs::msg::TransformStamped &t) {
+
+    // init transformstamped
+    geometry_msgs::msg::TransformStamped cart_tf;
+    // corresponding tf variables
+    cart_tf.header.stamp = t.header.stamp;
+    cart_tf.header.frame_id = "robot_front_laser_base_link";
+    cart_tf.child_frame_id = "cart_frame";
+
+    // set translation coordinates
+    vec_mu.lock();
+    cart_tf.transform.translation.x = vec2mid_pt.first;
+    cart_tf.transform.translation.y = vec2mid_pt.second;
+
+    cart_tf.transform.translation.z = t.transform.translation.z;
+    (void)t;
+    vec_mu.unlock();
+
+    // set RPY
+    cart_tf.transform.rotation.y = t.transform.rotation.y;
+    cart_tf.transform.rotation.z = t.transform.rotation.z;
+    cart_tf.transform.rotation.x = t.transform.rotation.x;
+    cart_tf.transform.rotation.w = t.transform.rotation.w;
+
+    // TODO TF BROADCASTER
+    tf_broadcaster_->sendTransform(cart_tf);
+  }
+
   void timer_callback() {
-    // init frames needed
-    string target_frame = "robot_front_laser_link";
-    string robot_odom = "robot_odom";
+
+    // transform looked up
+    geometry_msgs::msg::TransformStamped t;
     // Look up transformation
     try {
-      t = std::make_shared<geometry_msgs::msg::TransformStamped>(
-          tf_buffer_->lookupTransform(target_frame, robot_odom,
-                                      tf2::TimePointZero));
+      t = tf_buffer_->lookupTransform(target_frame, robot_odom,
+                                      tf2::TimePointZero);
     } catch (const tf2::TransformException &ex) {
       RCLCPP_INFO(this->get_logger(), "Could not transform %s to %s: %s",
                   target_frame.c_str(), robot_odom.c_str(), ex.what());
       return;
     }
 
+    // check if both legs of cart are detected
+    if (got_both_legs) {
+      RCLCPP_INFO(this->get_logger(), "Trying to Broadcast TF");
+      broadcastCartTF(t);
+    }
+
     // Do something with the transform (e.g., print it)
     RCLCPP_INFO(get_logger(), "Received transform: [%f, %f, %f]",
-                t->transform.translation.x, t->transform.translation.y,
-                t->transform.translation.z);
+                t.transform.translation.x, t.transform.translation.y,
+                t.transform.translation.z);
   }
 
   vector<std::pair<int, int>>
@@ -145,21 +185,36 @@ private:
                         // represent left (negative rads)
       float dist = dist_values[index];
 
-      cout << "index is " << index << endl;
-      cout << "rad is " << rad << endl;
-      cout << "dist is " << dist << endl;
+      // cout << "index is " << index << endl;
+      // cout << "rad is " << rad << endl;
+      // cout << "dist is " << dist << endl;
 
       // calc x and y
       float x = sin(rad + M_PI_2) * dist;
       float y = cos(rad + M_PI_2) * dist;
 
-      cout << "x is " << x << endl;
-      cout << "y is " << y << endl;
+      // cout << "x is " << x << endl;
+      // cout << "y is " << y << endl;
 
       // create pair and store
       vec_xy.emplace_back(make_pair(x, y));
     }
     return vec_xy;
+  }
+
+  void setVec2MidPt(const vector<pair<float, float>> xy_pairs) {
+    // MUTEX LOCK HERE
+    vec_mu.lock();
+
+    // combine the pair
+    vec2mid_pt = std::make_pair(xy_pairs[0].first + xy_pairs[1].first,
+                                xy_pairs[0].second + xy_pairs[1].second);
+    // halfing
+    vec2mid_pt.first /= 2;
+    vec2mid_pt.second /= 2;
+
+    // MUTEX UNLOCK HERE
+    vec_mu.unlock();
   }
 
   void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
@@ -168,39 +223,28 @@ private:
     vector<pair<int, int>> high_intense_ranges =
         getConsecutiveRanges(msg->intensities);
 
-    // find the indices with min value
-    vector<int> min_indices =
-        findMinIndicesInRanges(msg->ranges, high_intense_ranges);
+    // Count the number of legs detected (one xy pairs is assumed to be one
+    // legg)
+    if (high_intense_ranges.size() == 2) {
+      // set flag for tf read
+      got_both_legs = true;
 
-    // convert min indices into xy vectors
-    vector<pair<float, float>> vec_xy =
-        getXYFromIndex(min_indices, msg->ranges, msg->ranges.size() / 2);
+      // find the indices with min value
+      vector<int> min_indices =
+          findMinIndicesInRanges(msg->ranges, high_intense_ranges);
 
-    // check if there is strictly vec_xy has two values
-    if (vec_xy.size() == 2) {
+      // convert min indices into xy vectors
+      vector<pair<float, float>> vec_xy =
+          getXYFromIndex(min_indices, msg->ranges, msg->ranges.size() / 2);
 
-      pair<float, float> vec2mid_pt =
-          make_pair(vec_xy[0].first + vec_xy[1].first,
-                    vec_xy[0].second + vec_xy[1].second);
+      // get vector pointing to the mid_pt between cart legs
+      setVec2MidPt(vec_xy);
 
-      cout << "vec2mid_pt first " << vec2mid_pt.first << "; vec2mid_pt second "
-           << vec2mid_pt.second << endl;
+    } else {
+      got_both_legs = false;
+      // check if there are
+      cout << "MUST have exactly two legs to do broadcast" << endl;
     }
-
-    // init transformstamped
-    // geometry_msgs::msg::TransformStamped t;
-    // // corresponding tf variables
-    // t.header.stamp = this->get_clock()->now();
-    // t.header.frame_id = "robot_front_laser_base_link";
-    // t.child_frame_id = "cart_frame";
-
-    // coordinates from the message and set the z coordinate to 0
-    // t.transform.translation.x = cur_pos.x;
-    // t.transform.translation.y = cur_pos.y;
-    // t.transform.translation.z = cur_z;
-
-    // TODO TF BROADCASTER
-
     std::cout << "------------------------------------" << endl;
   }
 
@@ -225,11 +269,16 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
+  // frames
+  string target_frame;
+  string robot_odom;
+
+  // vec2 mid_pt;
+  std::pair<float, float> vec2mid_pt;
+
   // flags
   bool got_req;
-
-  // transform looked up
-  std::shared_ptr<geometry_msgs::msg::TransformStamped> t;
+  bool got_both_legs;
 };
 
 int main(int argc, char *argv[]) {

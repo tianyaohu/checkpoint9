@@ -7,6 +7,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 #include <attach_shelf/srv/go_to_loading.hpp>
+#include <tf2/LinearMath/Quaternion.h>
 
 #include <cmath>
 #include <cstddef>
@@ -77,29 +78,30 @@ private:
   void broadcastCartTF(const geometry_msgs::msg::TransformStamped &t) {
 
     // init transformstamped
-    geometry_msgs::msg::TransformStamped cart_tf;
+    geometry_msgs::msg::TransformStamped tf_togo;
     // corresponding tf variables
-    cart_tf.header.stamp = t.header.stamp;
-    cart_tf.header.frame_id = "robot_front_laser_base_link";
-    cart_tf.child_frame_id = "cart_frame";
+    tf_togo.header.stamp = t.header.stamp;
+    tf_togo.header.frame_id = "robot_front_laser_base_link";
+    tf_togo.child_frame_id = "cart_frame";
 
     // set translation coordinates
     vec_mu.lock();
-    cart_tf.transform.translation.x = vec2mid_pt.first;
-    cart_tf.transform.translation.y = vec2mid_pt.second;
+    tf_togo.transform.translation.x = vec2mid_pt.first;
+    tf_togo.transform.translation.y = vec2mid_pt.second;
 
-    cart_tf.transform.translation.z = t.transform.translation.z;
+    tf_togo.transform.translation.z = t.transform.translation.z;
     (void)t;
     vec_mu.unlock();
 
-    // set RPY
-    cart_tf.transform.rotation.y = t.transform.rotation.y;
-    cart_tf.transform.rotation.z = t.transform.rotation.z;
-    cart_tf.transform.rotation.x = t.transform.rotation.x;
-    cart_tf.transform.rotation.w = t.transform.rotation.w;
+    tf2::Quaternion q;
+    q.setRPY(0, 0, 0);
+    tf_togo.transform.rotation.x = q.x();
+    tf_togo.transform.rotation.y = q.y();
+    tf_togo.transform.rotation.z = q.z();
+    tf_togo.transform.rotation.w = q.w();
 
     // TODO TF BROADCASTER
-    tf_broadcaster_->sendTransform(cart_tf);
+    tf_broadcaster_->sendTransform(tf_togo);
   }
 
   void timer_callback() {
@@ -129,8 +131,8 @@ private:
   }
 
   vector<std::pair<int, int>>
-  getConsecutiveRanges(const vector<float> &values) {
-    float THRESH_HOLD = 0.001;
+  getConsecutiveRanges(const vector<float> &values,
+                       const float THRESH_HOLD = 0.001) {
     vector<std::pair<int, int>> ranges;
 
     size_t start = 0;
@@ -177,24 +179,30 @@ private:
 
   vector<pair<float, float>> getXYFromIndex(const vector<int> indices,
                                             const vector<float> dist_values,
-                                            int len_half_range) {
+                                            float angle_start,
+                                            float angle_increment) {
     vector<pair<float, float>> vec_xy;
-    for (const auto &index : indices) {
-      float rad = static_cast<float>(len_half_range - index) / len_half_range *
-                  M_PI; // here assumes that indices lower than half range
-                        // represent left (negative rads)
+    for (const int &index : indices) {
+      //   float rad = static_cast<float>(len_half_range - index) /
+      //   len_half_range *
+      //               M_PI; // here assumes that indices lower than half range
+      //                     // represent left (negative rads)
+      float rad = angle_start + angle_increment * index;
       float dist = dist_values[index];
 
-      // cout << "index is " << index << endl;
-      // cout << "rad is " << rad << endl;
-      // cout << "dist is " << dist << endl;
+      cout << "index is " << index << endl;
+      cout << "rad is " << rad << endl;
+      cout << "dist is " << dist << endl;
 
       // calc x and y
+      //   float x = sin(rad + M_PI_2) * dist;
+      //   float y = cos(rad + M_PI_2) * dist;
+
       float x = sin(rad + M_PI_2) * dist;
       float y = cos(rad + M_PI_2) * dist;
 
-      // cout << "x is " << x << endl;
-      // cout << "y is " << y << endl;
+      cout << "x is " << x << endl;
+      cout << "y is " << y << endl;
 
       // create pair and store
       vec_xy.emplace_back(make_pair(x, y));
@@ -234,8 +242,8 @@ private:
           findMinIndicesInRanges(msg->ranges, high_intense_ranges);
 
       // convert min indices into xy vectors
-      vector<pair<float, float>> vec_xy =
-          getXYFromIndex(min_indices, msg->ranges, msg->ranges.size() / 2);
+      vector<pair<float, float>> vec_xy = getXYFromIndex(
+          min_indices, msg->ranges, msg->angle_min, msg->angle_increment);
 
       // get vector pointing to the mid_pt between cart legs
       setVec2MidPt(vec_xy);

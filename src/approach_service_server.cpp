@@ -5,11 +5,14 @@
 #include "rclcpp/executors/single_threaded_executor.hpp"
 #include "rclcpp/logging.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/utilities.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "std_msgs/msg/detail/empty__struct.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 #include <attach_shelf/srv/go_to_loading.hpp>
+#include <std_msgs/msg/empty.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 
 #include <cmath>
@@ -67,6 +70,12 @@ public:
     vel_pub_ =
         this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
 
+    // elevator pub
+    lift_up_pub_ =
+        this->create_publisher<std_msgs::msg::Empty>("/elevator_up", 1);
+    lift_down_pub_ =
+        this->create_publisher<std_msgs::msg::Empty>("/elevator_down", 1);
+
     // init frames needed COULD BE PARAMETERS
     to_frame = "cart_frame";
     from_frame = "robot_base_link";
@@ -85,12 +94,29 @@ private:
 
     RCLCPP_INFO(this->get_logger(), "attach2shelf request: %s",
                 request->attach_to_shelf ? "True" : "False");
-
+    // approach shelff
     bool to_shelf = approach_shelf();
 
-    cout << "Within service handler, to shelf success?" << to_shelf << endl;
+    // check if lift is needed
+    if (request->attach_to_shelf) {
+      lift_up();
+    }
+
+    RCLCPP_INFO(this->get_logger(),
+                "Within service handler, to shelf success? %s",
+                to_shelf ? "True" : "False");
 
     response->complete = to_shelf;
+  }
+
+  void lift_up() {
+    std_msgs::msg::Empty empty;
+    lift_up_pub_->publish(empty);
+  }
+
+  void lift_down() {
+    std_msgs::msg::Empty empty;
+    lift_down_pub_->publish(empty);
   }
 
   bool approach_shelf(float cx = 0) {
@@ -113,17 +139,15 @@ private:
                               pow(t.transform.translation.y, 2) +
                               pow(t.transform.translation.z, 2));
 
-      cout << "error distance is " << error_dist << endl;
+      RCLCPP_INFO(this->get_logger(), "error distance is %f", error_dist);
 
       // init kp
-      float kp_distance = 0.4;
-      float kp_yaw = 1;
+      float kp_distance = 1;
+      float kp_yaw = 1.5;
 
       // calculate true delta
       float error_yaw;
       if (error_dist < THRESH_HOLD * 2) {
-        // set linear x to 0
-        kp_distance /= 2;
 
         // init quaternion
         tf2::Quaternion q(t.transform.rotation.x, t.transform.rotation.y,
@@ -132,39 +156,68 @@ private:
         double roll, pitch, error_yaw;
         m.getRPY(roll, pitch, error_yaw);
 
-        cout << "close enoough, error yaw is " << error_yaw << endl;
+        RCLCPP_INFO(this->get_logger(), "close enoough, error yaw is %f",
+                    error_yaw);
+
       } else {
         error_yaw = atan2(t.transform.translation.y, t.transform.translation.x);
-        cout << "far , error yaw is " << error_yaw << endl;
+
+        RCLCPP_INFO(this->get_logger(), "far , error yaw is %f", error_yaw);
       }
 
       // raw speed
       float raw_linear_x = kp_distance * error_dist;
       float raw_angular_z = kp_yaw * error_yaw;
 
-      // move
-      move(raw_linear_x, raw_angular_z);
-
       // close enought to target frame??
       if (abs(error_yaw) < THRESH_HOLD && error_dist < THRESH_HOLD) {
-        // stop
-        move(0.2, 0);
-        cout << "going underneath shelf" << endl;
-        this_thread::sleep_for(3s);
-        move(0, 0);
-        cout << "stopping underneath shelf???" << endl;
 
+        // Tick: Record the start time
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        moveForX(5, 0.2, 0);
+
+        // Tock: Record the end time
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        // Calculate the elapsed time
+        auto elapsed_time =
+            std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
+                                                                  start_time);
+
+        // Print the elapsed time
+        std::cout << "Elapsed time: " << elapsed_time.count() << " milliseconds"
+                  << std::endl;
+
+        // stop
+        moveForX(1, 0, 0);
         return true;
+      } else {
+        // move
+        move(raw_linear_x, raw_angular_z);
       }
       // sleep
-      this_thread::sleep_for(50ms);
+      rclcpp::sleep_for(50ms);
+      ;
     }
     // this should never be reached
     return false;
   }
 
+  void moveForX(int x_sec, float linear_x, float angular_z) {
+    // Set the loop rate to publish every 500 milliseconds
+    rclcpp::WallRate loop_rate(10); // 10 Hz (publish every 100 milliseconds)
+
+    // Publish Twist messages in a loop for 10 seconds
+    auto start_time = this->now();
+    while ((this->now() - start_time).seconds() < x_sec) { // Run for 10 seconds
+      move(linear_x, angular_z);
+      loop_rate.sleep(); // Sleep to achieve the specified loop rate
+    }
+  }
+
   void move(float linear_x, float angular_z, float MAX_LINEAR_X = 0.5,
-            float MAX_ANGULAR_Z = 0.5) {
+            float MAX_ANGULAR_Z = 1) {
     geometry_msgs::msg::Twist msg;
     msg.linear.x = clamp(linear_x, -MAX_LINEAR_X, MAX_LINEAR_X);
     msg.angular.z = clamp(angular_z, -MAX_ANGULAR_Z, MAX_ANGULAR_Z);
@@ -298,7 +351,8 @@ private:
     } else {
       got_both_legs = false;
       // check if there are
-      cout << "MUST have exactly two legs to do broadcast" << endl;
+      RCLCPP_ERROR(this->get_logger(),
+                   "MUST have exactly two legs to do broadcast");
     }
 
     // BroadCast TF if both legs of cart are detected
@@ -312,11 +366,15 @@ private:
   rclcpp::CallbackGroup::SharedPtr callback_group_3;
 
   rclcpp::Service<GoToLoading>::SharedPtr srv_;
+
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr lift_up_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr lift_down_pub_;
 
   // frames
   string to_frame;

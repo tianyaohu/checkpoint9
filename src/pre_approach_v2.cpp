@@ -87,10 +87,10 @@ public:
         this->create_client<attach_shelf::srv::GoToLoading>("/approach_shelf");
 
     // set initial speed
-    speed_linear_x = 0.2;
+    speed_linear_x = 0.4;
     speed_angular_z = 0.0;
 
-    MAX_ANGULAR_SPEED = 0.5;
+    MAX_ANGULAR_SPEED = 0.7;
   }
 
 private:

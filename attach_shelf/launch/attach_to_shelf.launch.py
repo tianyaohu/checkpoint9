@@ -65,7 +65,7 @@ def generate_launch_description():
         obstacle_arg,
         degrees_arg,
         final_approach_arg,
-        # pre_approach_v2_node,
+        pre_approach_v2_node,
         approach_load_service_server,
-        # rviz_node
+        rviz_node
     ])

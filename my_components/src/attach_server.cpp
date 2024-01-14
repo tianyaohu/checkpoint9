@@ -183,7 +183,7 @@ void AttachServer::on_timer() {
         reached_cart = true;
         RCLCPP_INFO(this->get_logger(), "Reached Cart");
 
-        if (extra_time > -20) {
+        if (extra_time == 0) {
           // lift cart
           lift_up();
         }

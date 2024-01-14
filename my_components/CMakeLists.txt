@@ -16,7 +16,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_packages(attach_shelf REQUIRED)
+find_package(attach_shelf REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -33,7 +33,7 @@ endif()
 #include
 include_directories(include)
 
-#pre approach component
+################## pre approach component ################## 
 add_library(pre_approach_component SHARED src/pre_approach.cpp)
 target_compile_definitions(pre_approach_component PRIVATE "COMPOSITION_BUILDING_DLL")
 ament_target_dependencies(pre_approach_component
@@ -41,13 +41,57 @@ ament_target_dependencies(pre_approach_component
   "rclcpp_components"
   "nav_msgs"
   "sensor_msgs"
+  "geometry_msgs"
   )
 rclcpp_components_register_nodes(pre_approach_component "my_components::PreApproach")
 set(node_plugins "${node_plugins}my_components::PreApproach;$<TARGET_FILE:pre_approach_component>\n")
 
+
+################## Attach Server Component ################## 
+add_library(attach_server_component SHARED src/attach_server.cpp)
+target_compile_definitions(attach_server_component PRIVATE "COMPOSITION_BUILDING_DLL")
+ament_target_dependencies(attach_server_component
+  "rclcpp"
+  "rclcpp_components"
+  "std_msgs"
+  "sensor_msgs"
+  "geometry_msgs"
+  "tf2_ros"
+  "tf2_ros"
+  "tf2"
+  "attach_shelf")
+rclcpp_components_register_nodes(attach_server_component "my_components::AttachServer")
+set(node_plugins "${node_plugins}my_components::AttachServer;$<TARGET_FILE:attach_server_component>\n")
+
+################## MANUAL COMPOSITION of server ################## 
+add_executable(attach_server_manual_composition
+  src/attach_server_manual_composition.cpp)
+target_link_libraries(attach_server_manual_composition
+  attach_server_component)
+ament_target_dependencies(attach_server_manual_composition
+  "rclcpp")
+
+install(TARGETS
+  attach_server_manual_composition
+  DESTINATION lib/${PROJECT_NAME})
+
+################## Attach Client ################## 
+add_library(attach_client_component SHARED src/attach_client.cpp)
+target_compile_definitions(attach_client_component PRIVATE "COMPOSITION_BUILDING_DLL")
+ament_target_dependencies(attach_client_component
+  "rclcpp"
+  "rclcpp_components"
+   "attach_shelf"
+  )
+rclcpp_components_register_nodes(attach_client_component "my_components::AttachClient")
+set(node_plugins "${node_plugins}my_components::AttachClient;$<TARGET_FILE:attach_client_component>\n")
+
 #install targets
 install(TARGETS
   pre_approach_component
+  attach_server_component
+  attach_server_manual_composition
+  attach_client_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)

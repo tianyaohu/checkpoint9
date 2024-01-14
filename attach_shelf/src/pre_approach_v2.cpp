@@ -167,10 +167,15 @@ private:
   }
 
   void timer_callback() {
-    auto message = geometry_msgs::msg::Twist();
-    message.linear.x = speed_linear_x;
-    message.angular.z = speed_angular_z;
-    vel_pub_->publish(message);
+    // check if rotation is not finished
+    if (!finished_rot) {
+      auto message = geometry_msgs::msg::Twist();
+      message.linear.x = speed_linear_x;
+      message.angular.z = speed_angular_z;
+      vel_pub_->publish(message);
+      RCLCPP_INFO(this->get_logger(),
+                  "Moving cmd published within pre_approach ");
+    }
   }
 
   void rotate() {
@@ -182,7 +187,7 @@ private:
           turn_delta > 0 ? -2 * M_PI + turn_delta : 2 * M_PI + turn_delta;
     }
     // set angular speed
-    speed_angular_z = min(MAX_ANGULAR_SPEED, turn_delta / -2);
+    speed_angular_z = min(MAX_ANGULAR_SPEED, turn_delta / -1);
 
     RCLCPP_INFO(this->get_logger(), "turn_delta? %f", turn_delta);
     RCLCPP_INFO(this->get_logger(), "cur_yaw? %f", cur_yaw);
@@ -193,8 +198,11 @@ private:
       speed_angular_z = 0;
       finished_rot = true;
       RCLCPP_INFO(this->get_logger(), "Final Yaw upon finishing? %f", cur_yaw);
-      // call approach service
+
+      RCLCPP_INFO(this->get_logger(), "Calling approaching service");
       call_approach_service();
+
+      // call approach service
     }
   }
 
@@ -212,11 +220,13 @@ private:
     }
     // service to became available
 
+    // set service completion flag to false;
+    attach_load_service_done_ = false;
+
     // init request
     auto request = std::make_shared<attach_shelf::srv::GoToLoading::Request>();
-    request->attach_to_shelf = true; // temp need to add one more argument
-    // set service status flag to false;
-    attach_load_service_done_ = false;
+    request->attach_to_shelf = arg_final_approach;
+
     // send request
     auto result_future = client_->async_send_request(
         request, std::bind(&PreApproach::response_callback, this,

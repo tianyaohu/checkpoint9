@@ -82,7 +82,7 @@ public:
 
     // server
     srv_ = create_service<GoToLoading>(
-        "approach_shelf",
+        "/approach_shelf",
         std::bind(&ApproachShelfService::GoToLoading_callback, this, _1, _2),
         rmw_qos_profile_services_default, callback_group_3);
   }
@@ -92,14 +92,25 @@ private:
   GoToLoading_callback(const std::shared_ptr<GoToLoading::Request> request,
                        const std::shared_ptr<GoToLoading::Response> response) {
 
-    RCLCPP_INFO(this->get_logger(), "attach2shelf request: %s",
+    RCLCPP_INFO(this->get_logger(), "Final approach?: %s",
                 request->attach_to_shelf ? "True" : "False");
-    // approach shelff
-    bool to_shelf = approach_shelf();
 
+    // set bool got request
+    got_req = true;
+
+    bool to_shelf = false;
     // check if lift is needed
     if (request->attach_to_shelf) {
-      lift_up();
+      // force sleeping just to wait on broadcast for 2 sec
+      moveForX(2, 0, 0);
+
+      // approach shelff
+      to_shelf = approach_shelf();
+      // if going under shelf was successful
+      if (to_shelf) {
+        // lift cart
+        lift_up();
+      }
     }
 
     RCLCPP_INFO(this->get_logger(),
@@ -107,6 +118,9 @@ private:
                 to_shelf ? "True" : "False");
 
     response->complete = to_shelf;
+
+    // // turn off tf broadcast
+    // got_req = false;
   }
 
   void lift_up() {
@@ -123,7 +137,7 @@ private:
     float THRESH_HOLD = 0.24;
     geometry_msgs::msg::TransformStamped t;
 
-    while (rclcpp::ok()) {
+    while (rclcpp::ok() && got_both_legs) {
       // Look up transformation
       try {
         t = tf_buffer_->lookupTransform(from_frame, to_frame,
@@ -175,7 +189,7 @@ private:
         // Tick: Record the start time
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        moveForX(5, 0.2, 0);
+        moveForX(3, 0.2, 0);
 
         // Tock: Record the end time
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -197,6 +211,8 @@ private:
         move(raw_linear_x, raw_angular_z);
       }
       // sleep
+      RCLCPP_INFO(this->get_logger(), "Sleeping in shelf approach loop");
+
       rclcpp::sleep_for(50ms);
       ;
     }
@@ -329,35 +345,38 @@ private:
 
   void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
 
-    // find the ranges with consecutive indices with values greater
-    vector<pair<int, int>> high_intense_ranges =
-        getConsecutiveRanges(msg->intensities);
+    // Only Activatef request was recieved
+    if (got_req) {
+      // find the ranges with consecutive indices with values greater
+      vector<pair<int, int>> high_intense_ranges =
+          getConsecutiveRanges(msg->intensities);
 
-    // Check cart leg count
-    if (high_intense_ranges.size() == 2) {
-      // set flag for tf read
-      got_both_legs = true;
+      // Check cart leg count
+      if (high_intense_ranges.size() == 2) {
+        // set flag for tf read
+        got_both_legs = true;
 
-      // find the indices with min value
-      vector<int> min_indices = getMidRangeIndex(high_intense_ranges);
+        // find the indices with min value
+        vector<int> min_indices = getMidRangeIndex(high_intense_ranges);
 
-      // convert min indices into xy vectors
-      vector<pair<float, float>> vec_xy = getXYFromIndex(
-          min_indices, msg->ranges, msg->angle_min, msg->angle_increment);
+        // convert min indices into xy vectors
+        vector<pair<float, float>> vec_xy = getXYFromIndex(
+            min_indices, msg->ranges, msg->angle_min, msg->angle_increment);
 
-      // get vector pointing to the mid_pt between cart legs
-      setVec2MidPt(vec_xy);
+        // get vector pointing to the mid_pt between cart legs
+        setVec2MidPt(vec_xy);
 
-    } else {
-      got_both_legs = false;
-      // check if there are
-      RCLCPP_ERROR(this->get_logger(),
-                   "MUST have exactly two legs to do broadcast");
-    }
+      } else {
+        got_both_legs = false;
+        // check if there are
+        RCLCPP_ERROR(this->get_logger(),
+                     "MUST have exactly two legs to do broadcast");
+      }
 
-    // BroadCast TF if both legs of cart are detected
-    if (got_both_legs) {
-      broadcastCartTF(msg);
+      // BroadCast TF if both legs of cart are detected
+      if (got_both_legs) {
+        broadcastCartTF(msg);
+      }
     }
   }
 

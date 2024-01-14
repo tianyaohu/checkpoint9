@@ -62,7 +62,7 @@ void PreApproach::rotate() {
         turn_delta > 0 ? -2 * M_PI + turn_delta : 2 * M_PI + turn_delta;
   }
   // set angular speed
-  speed_angular_z = min(MAX_ANGULAR_SPEED, turn_delta / -2);
+  speed_angular_z = min(MAX_ANGULAR_SPEED, turn_delta / -1);
 
   RCLCPP_INFO(this->get_logger(), "turn_delta? %f", turn_delta);
   RCLCPP_INFO(this->get_logger(), "cur_yaw? %f", cur_yaw);

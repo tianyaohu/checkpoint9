@@ -73,8 +73,6 @@ void PreApproach::rotate() {
     speed_angular_z = 0;
     finished_rot = true;
     RCLCPP_INFO(this->get_logger(), "Final Yaw upon finishing? %f", cur_yaw);
-    // // call approach service
-    // call_approach_service();
   } else {
 
     move();

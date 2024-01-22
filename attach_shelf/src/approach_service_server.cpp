@@ -55,9 +55,9 @@ public:
     qos_profile_subscriber.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);
 
     // init laser subscription with QOS
-    laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-        "scan", qos_profile_subscriber,
-        std::bind(&ApproachShelfService::scan_callback, this, _1), option1);
+    // laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+    //     "scan", qos_profile_subscriber,
+    //     std::bind(&ApproachShelfService::scan_callback, this, _1), option1);
 
     // transform Broadcaster
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -77,7 +77,7 @@ public:
         this->create_publisher<std_msgs::msg::Empty>("/elevator_down", 1);
 
     // init frames needed COULD BE PARAMETERS
-    to_frame = "cart_frame";
+    to_frame = "robot_cart_laser";
     from_frame = "robot_base_link";
 
     // server
@@ -106,6 +106,9 @@ private:
 
       // approach shelff
       to_shelf = approach_shelf();
+
+      cout << " to shelf ? " << to_shelf << endl;
+
       // if going under shelf was successful
       if (to_shelf) {
         // lift cart
@@ -134,10 +137,12 @@ private:
   }
 
   bool approach_shelf(float cx = 0) {
-    float THRESH_HOLD = 0.24;
+    float THRESH_HOLD = 0.38;
     geometry_msgs::msg::TransformStamped t;
 
-    while (rclcpp::ok() && got_both_legs) {
+    // while (rclcpp::ok() && got_both_legs) {
+    while (rclcpp::ok()) {
+
       // Look up transformation
       try {
         t = tf_buffer_->lookupTransform(from_frame, to_frame,
@@ -156,7 +161,7 @@ private:
       RCLCPP_INFO(this->get_logger(), "error distance is %f", error_dist);
 
       // init kp
-      float kp_distance = 1;
+      float kp_distance = 0.3;
       float kp_yaw = 1.5;
 
       // calculate true delta
@@ -183,13 +188,19 @@ private:
       float raw_linear_x = kp_distance * error_dist;
       float raw_angular_z = kp_yaw * error_yaw;
 
+      cout << "error_dist" << error_dist << endl;
+      //   cout << "raw_angular_z" << raw_angular_z << endl;
+
+      //   cout << "raw_linear_x " << raw_linear_x << endl;
+      //   cout << "raw_angular_z" << raw_angular_z << endl;
+
       // close enought to target frame??
       if (abs(error_yaw) < THRESH_HOLD && error_dist < THRESH_HOLD) {
 
         // Tick: Record the start time
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        moveForX(3, 0.2, 0);
+        moveForX(4, 0.125, 0);
 
         // Tock: Record the end time
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -374,9 +385,9 @@ private:
       }
 
       // BroadCast TF if both legs of cart are detected
-      if (got_both_legs) {
-        broadcastCartTF(msg);
-      }
+      //   if (got_both_legs) {
+      //     broadcastCartTF(msg);
+      //   }
     }
   }
 

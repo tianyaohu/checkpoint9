@@ -161,8 +161,8 @@ private:
       RCLCPP_INFO(this->get_logger(), "error distance is %f", error_dist);
 
       // init kp
-      float kp_distance = 0.3;
-      float kp_yaw = 1.5;
+      float kp_distance = 0.15;
+      float kp_yaw = 3;
 
       // calculate true delta
       float error_yaw;
@@ -195,7 +195,7 @@ private:
       //   cout << "raw_angular_z" << raw_angular_z << endl;
 
       // close enought to target frame??
-      if (abs(error_yaw) < THRESH_HOLD && error_dist < THRESH_HOLD) {
+      if (abs(error_yaw) < 0.1 && error_dist < THRESH_HOLD) {
 
         // Tick: Record the start time
         auto start_time = std::chrono::high_resolution_clock::now();

@@ -12,7 +12,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 #include <attach_shelf/srv/go_to_loading.hpp>
-#include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 
 #include <cmath>
@@ -72,9 +72,9 @@ public:
 
     // elevator pub
     lift_up_pub_ =
-        this->create_publisher<std_msgs::msg::Empty>("/elevator_up", 1);
+        this->create_publisher<std_msgs::msg::String>("/elevator_up", 1);
     lift_down_pub_ =
-        this->create_publisher<std_msgs::msg::Empty>("/elevator_down", 1);
+        this->create_publisher<std_msgs::msg::String>("/elevator_down", 1);
 
     // init frames needed COULD BE PARAMETERS
     to_frame = "robot_cart_laser";
@@ -127,13 +127,13 @@ private:
   }
 
   void lift_up() {
-    std_msgs::msg::Empty empty;
-    lift_up_pub_->publish(empty);
+    std_msgs::msg::String msg;
+    lift_up_pub_->publish(msg);
   }
 
   void lift_down() {
-    std_msgs::msg::Empty empty;
-    lift_down_pub_->publish(empty);
+    std_msgs::msg::String msg;
+    lift_down_pub_->publish(msg);
   }
 
   bool approach_shelf(float cx = 0) {
@@ -403,8 +403,8 @@ private:
 
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
-  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr lift_up_pub_;
-  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr lift_down_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr lift_up_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr lift_down_pub_;
 
   // frames
   string to_frame;

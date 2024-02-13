@@ -68,13 +68,18 @@ public:
 
     // init cmd_vel publisher
     vel_pub_ =
-        this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
+        // this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel",
+        // 10);
+        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
 
     // elevator pub
     lift_up_pub_ =
-        this->create_publisher<std_msgs::msg::String>("/elevator_up", 1);
+        this->create_publisher<std_msgs::msg::String>("elevator_up", 1);
     lift_down_pub_ =
-        this->create_publisher<std_msgs::msg::String>("/elevator_down", 1);
+        this->create_publisher<std_msgs::msg::String>("elevator_down", 1);
+
+    // send elevator down, to ensure starting with elevator down
+    this->lift_down();
 
     // init frames needed COULD BE PARAMETERS
     to_frame = "robot_cart_laser";
@@ -101,8 +106,12 @@ private:
     bool to_shelf = false;
     // check if lift is needed
     if (request->attach_to_shelf) {
-      // force sleeping just to wait on broadcast for 2 sec
-      moveForX(2, 0, 0);
+      // TEST: testing to make sure that elevator works before approaching;
+      RCLCPP_INFO(this->get_logger(),
+                  "Testing elevator to make sure everything works before "
+                  "approaching shelf.");
+      this->lift_up();
+      this->lift_down();
 
       // approach shelff
       to_shelf = approach_shelf();
@@ -128,12 +137,18 @@ private:
 
   void lift_up() {
     std_msgs::msg::String msg;
-    lift_up_pub_->publish(msg);
+    msg.data = "";
+    this->lift_up_pub_->publish(msg);
+    RCLCPP_INFO(this->get_logger(), "Lifting up...");
+    this->moveForX(8, 0, 0);
   }
 
   void lift_down() {
     std_msgs::msg::String msg;
-    lift_down_pub_->publish(msg);
+    msg.data = "";
+    this->lift_down_pub_->publish(msg);
+    RCLCPP_INFO(this->get_logger(), "Lifting down...");
+    this->moveForX(8, 0, 0);
   }
 
   bool approach_shelf(float cx = 0) {
@@ -189,8 +204,6 @@ private:
       float raw_angular_z = kp_yaw * error_yaw;
 
       cout << "error_dist" << error_dist << endl;
-      //   cout << "raw_angular_z" << raw_angular_z << endl;
-
       //   cout << "raw_linear_x " << raw_linear_x << endl;
       //   cout << "raw_angular_z" << raw_angular_z << endl;
 

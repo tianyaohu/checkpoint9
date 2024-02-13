@@ -152,7 +152,7 @@ private:
   }
 
   bool approach_shelf(float cx = 0) {
-    float THRESH_HOLD = 0.38;
+    float THRESH_HOLD = 0.5;
     geometry_msgs::msg::TransformStamped t;
 
     // while (rclcpp::ok() && got_both_legs) {
@@ -208,12 +208,12 @@ private:
       //   cout << "raw_angular_z" << raw_angular_z << endl;
 
       // close enought to target frame??
-      if (abs(error_yaw) < 0.1 && error_dist < THRESH_HOLD) {
+      if (abs(error_yaw) < 0.07 && error_dist < THRESH_HOLD) {
 
         // Tick: Record the start time
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        moveForX(4, 0.125, 0);
+        moveForX(5, 0.12, 0);
 
         // Tock: Record the end time
         auto end_time = std::chrono::high_resolution_clock::now();
